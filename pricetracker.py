@@ -7,9 +7,145 @@ import argparse
 import subprocess
 from bs4 import BeautifulSoup
 import time
+import tkinter as tk
+from tkinter import ttk, messagebox
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import random  # For demo data
 
 # Data file
 DATA_FILE = "price_tracker.csv"
+
+class PriceTrackerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Price Tracker")
+        self.root.geometry("800x600")
+        
+        # Create main frame
+        self.main_frame = ttk.Frame(self.root, padding="10")
+        self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Create buttons
+        self.update_button = ttk.Button(self.main_frame, text="Update Prices", command=self.update_prices)
+        self.update_button.grid(row=0, column=0, padx=5, pady=5)
+        
+        # Phone number entry
+        self.phone_label = ttk.Label(self.main_frame, text="Phone Number:")
+        self.phone_label.grid(row=0, column=1, padx=5, pady=5)
+        
+        self.phone_entry = ttk.Entry(self.main_frame)
+        self.phone_entry.grid(row=0, column=2, padx=5, pady=5)
+        
+        self.send_button = ttk.Button(self.main_frame, text="Send Graph", command=self.send_graph)
+        self.send_button.grid(row=0, column=3, padx=5, pady=5)
+        
+        # Create demo data button
+        self.demo_button = ttk.Button(self.main_frame, text="Generate Demo Data", command=self.generate_demo_data)
+        self.demo_button.grid(row=0, column=4, padx=5, pady=5)
+        
+        # Create figure for matplotlib
+        self.fig, self.ax = plt.subplots(figsize=(10, 6))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.main_frame)
+        self.canvas.get_tk_widget().grid(row=1, column=0, columnspan=5, padx=5, pady=5)
+        
+        # Price display labels
+        self.price_frame = ttk.Frame(self.main_frame)
+        self.price_frame.grid(row=2, column=0, columnspan=5, pady=10)
+        
+        self.egg_price_label = ttk.Label(self.price_frame, text="Current Egg Price: N/A")
+        self.egg_price_label.grid(row=0, column=0, padx=20)
+        
+        self.gas_price_label = ttk.Label(self.price_frame, text="Current Gas Price: N/A")
+        self.gas_price_label.grid(row=0, column=1, padx=20)
+        
+        # Data file path
+        self.data_file = "price_tracker.csv"
+        
+        # Load existing data if available
+        self.load_data()
+
+    def fetch_prices(self):
+        """Fetch current prices (using random data for demo)"""
+        # In reality, you'd implement web scraping here
+        egg_price = round(random.uniform(2.50, 4.00), 2)
+        gas_price = round(random.uniform(3.00, 4.50), 2)
+        return egg_price, gas_price
+
+    def update_prices(self):
+        """Update prices and refresh the graph"""
+        egg_price, gas_price = self.fetch_prices()
+        
+        today = datetime.date.today()
+        new_data = pd.DataFrame({
+            'date': [today],
+            'egg_price': [egg_price],
+            'gas_price': [gas_price]
+        })
+        
+        if hasattr(self, 'df'):
+            self.df = pd.concat([self.df, new_data], ignore_index=True)
+        else:
+            self.df = new_data
+            
+        self.df.to_csv(self.data_file, index=False)
+        
+        # Update labels
+        self.egg_price_label.config(text=f"Current Egg Price: ${egg_price:.2f}")
+        self.gas_price_label.config(text=f"Current Gas Price: ${gas_price:.2f}")
+        
+        self.plot_data()
+        messagebox.showinfo("Success", "Prices updated successfully!")
+
+    def load_data(self):
+        """Load existing data if available"""
+        if os.path.exists(self.data_file):
+            self.df = pd.read_csv(self.data_file)
+            self.df['date'] = pd.to_datetime(self.df['date'])
+            self.plot_data()
+
+    def plot_data(self):
+        """Plot the price data"""
+        self.ax.clear()
+        if hasattr(self, 'df'):
+            self.df.plot(x='date', y=['egg_price', 'gas_price'], 
+                        ax=self.ax, marker='o')
+            self.ax.set_title('Price History')
+            self.ax.set_xlabel('Date')
+            self.ax.set_ylabel('Price ($)')
+            self.ax.grid(True)
+            self.ax.legend(['Eggs ($/dozen)', 'Gas ($/gallon)'])
+            self.fig.autofmt_xdate()  # Angle x-axis labels
+            self.canvas.draw()
+
+    def generate_demo_data(self):
+        """Generate demo data for testing"""
+        dates = pd.date_range(end=datetime.date.today(), periods=30, freq='D')
+        self.df = pd.DataFrame({
+            'date': dates,
+            'egg_price': [round(random.uniform(2.50, 4.00), 2) for _ in range(30)],
+            'gas_price': [round(random.uniform(3.00, 4.50), 2) for _ in range(30)]
+        })
+        self.df.to_csv(self.data_file, index=False)
+        self.plot_data()
+        
+        # Update labels with latest prices
+        self.egg_price_label.config(text=f"Current Egg Price: ${self.df['egg_price'].iloc[-1]:.2f}")
+        self.gas_price_label.config(text=f"Current Gas Price: ${self.df['gas_price'].iloc[-1]:.2f}")
+        
+        messagebox.showinfo("Success", "Demo data generated!")
+
+    def send_graph(self):
+        """Send the graph to the specified phone number"""
+        phone = self.phone_entry.get()
+        if not phone:
+            messagebox.showerror("Error", "Please enter a phone number!")
+            return
+            
+        # Save current graph
+        self.fig.savefig('price_chart.png')
+        
+        # Here you would implement the actual sending logic
+        messagebox.showinfo("Success", f"Graph would be sent to {phone}\n(Sending feature not implemented yet)")
 
 # Function to fetch egg prices (using web scraping as a placeholder)
 def fetch_egg_price():
@@ -26,7 +162,6 @@ def fetch_egg_price():
             # return float(price_element.text.strip().replace("$", ""))
             
             # For testing, return a random price between $2.50 and $4.00
-            import random
             return round(random.uniform(2.50, 4.00), 2)
         else:
             print(f"Failed to fetch egg price: HTTP {response.status_code}")
@@ -48,7 +183,6 @@ def fetch_gas_price():
             # return float(price_element.text.strip().replace("$", ""))
             
             # For testing, return a random price between $3.00 and $4.50
-            import random
             return round(random.uniform(3.00, 4.50), 2)
         else:
             print(f"Failed to fetch gas price: HTTP {response.status_code}")
@@ -276,4 +410,6 @@ def generate_demo_data():
     generate_chart()
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = PriceTrackerApp(root)
+    root.mainloop()
