@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
 import argparse
+import subprocess
 from bs4 import BeautifulSoup
 import time
 
@@ -67,14 +68,12 @@ def update_data():
     
     today = datetime.date.today()
     
-    # Create a dictionary for the new entry
-    new_data = {"date": today}
-    if egg_price is not None:
-        new_data["egg_price"] = egg_price
-    if gas_price is not None:
-        new_data["gas_price"] = gas_price
-    
-    new_entry = pd.DataFrame([new_data])
+    # Create a dictionary for the new entry with explicit types
+    new_data = pd.DataFrame({
+        "date": [pd.to_datetime(today)],
+        "egg_price": [egg_price] if egg_price is not None else [pd.NA],
+        "gas_price": [gas_price] if gas_price is not None else [pd.NA]
+    })
     
     # Load existing data or create new dataframe
     if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
@@ -83,12 +82,12 @@ def update_data():
             # Convert date column to datetime
             df["date"] = pd.to_datetime(df["date"])
             # Append new data
-            df = pd.concat([df, new_entry], ignore_index=True)
+            df = pd.concat([df, new_data], ignore_index=True)
         except Exception as e:
             print(f"Error reading existing data file: {e}")
-            df = new_entry
+            df = new_data
     else:
-        df = new_entry
+        df = new_data
     
     # Save the updated dataframe
     df.to_csv(DATA_FILE, index=False)
@@ -116,30 +115,29 @@ def generate_chart():
         if "egg_price" in df.columns and not df["egg_price"].isnull().all():
             plt.plot(df["date"], df["egg_price"], label="Egg Price ($/dozen)", marker="o", color="brown")
             # Annotate latest egg price
-            latest_idx = df["egg_price"].last_valid_index()
-            if latest_idx is not None:
-                latest_date = df["date"].iloc[latest_idx]
-                latest_egg_price = df["egg_price"].iloc[latest_idx]
-                plt.annotate(f"${latest_egg_price:.2f}", 
-                             (latest_date, latest_egg_price), 
+            # Get the last non-null egg price and its date
+            mask = df["egg_price"].notna()
+            if mask.any():
+                latest_date = df.loc[mask, "date"].iloc[-1]
+                latest_egg_price = df.loc[mask, "egg_price"].iloc[-1]
+                plt.annotate(f"${latest_egg_price:.2f}",
+                             (latest_date.to_pydatetime(), float(latest_egg_price)),
                              textcoords="offset points", 
-                             xytext=(0,10), 
+                             xytext=(0,10),
                              ha='center')
-        
         # Plot gas prices if available
         if "gas_price" in df.columns and not df["gas_price"].isnull().all():
             plt.plot(df["date"], df["gas_price"], label="Gas Price ($/gallon)", marker="s", color="blue")
             # Annotate latest gas price
-            latest_idx = df["gas_price"].last_valid_index()
-            if latest_idx is not None:
-                latest_date = df["date"].iloc[latest_idx]
-                latest_gas_price = df["gas_price"].iloc[latest_idx]
-                plt.annotate(f"${latest_gas_price:.2f}", 
-                             (latest_date, latest_gas_price), 
-                             textcoords="offset points", 
+            mask = df["gas_price"].notna()
+            if mask.any():
+                latest_date = df.loc[mask, "date"].iloc[-1]
+                latest_gas_price = df.loc[mask, "gas_price"].iloc[-1]
+                plt.annotate(f"${latest_gas_price:.2f}",
+                             (latest_date.to_pydatetime(), float(latest_gas_price)),
+                             textcoords="offset points",
                              xytext=(0,10), 
                              ha='center')
-        
         plt.xlabel("Date")
         plt.ylabel("Price ($)")
         plt.title("Weekly Average Egg & Gas Prices")
@@ -242,9 +240,8 @@ def generate_demo_data():
     end_date = datetime.date.today()
     start_date = end_date - datetime.timedelta(weeks=12)
     date_range = pd.date_range(start=start_date, end=end_date, freq='W')
-    
     # Generate random price data with a realistic trend
-    import numpy as np
+    from numpy.random import normal
     
     # Initial prices
     egg_price_base = 3.25
@@ -256,12 +253,11 @@ def generate_demo_data():
     
     for _ in range(1, len(date_range)):
         # Add some randomness and slight upward trend for eggs
-        egg_delta = np.random.normal(0.05, 0.15)  # slight upward trend
+        egg_delta = normal(0.05, 0.15)  # slight upward trend
         new_egg_price = max(1.99, min(5.99, egg_prices[-1] + egg_delta))
         egg_prices.append(round(new_egg_price, 2))
-        
         # Add some randomness and slight downward trend for gas
-        gas_delta = np.random.normal(-0.03, 0.12)  # slight downward trend
+        gas_delta = normal(-0.03, 0.12)  # slight downward trend
         new_gas_price = max(2.99, min(4.99, gas_prices[-1] + gas_delta))
         gas_prices.append(round(new_gas_price, 2))
     
